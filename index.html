@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Character Decomposition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a1a;
+    background: #fafafa;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 1.2rem;
+  }
+
+  .mode-row {
+    display: flex;
+    gap: 1.2rem;
+    margin-bottom: 1rem;
+  }
+
+  .mode-row label {
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+
+  .mode-row input[type="radio"] {
+    margin-right: 0.3rem;
+  }
+
+  #char-input {
+    display: block;
+    width: 100%;
+    height: 5rem;
+    font-size: 3rem;
+    text-align: center;
+    border: 2px solid #ccc;
+    border-radius: 6px;
+    outline: none;
+    background: #fff;
+  }
+
+  #char-input:focus {
+    border-color: #666;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+  }
+
+  button {
+    padding: 0.5rem 1.2rem;
+    font-size: 0.95rem;
+    border: 1px solid #999;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  button:hover { background: #eee; }
+  button:active { background: #ddd; }
+
+  #btn-decompose {
+    background: #f0880d;
+    color: #fff;
+    border-color: #d07400;
+  }
+  #btn-decompose:hover { background: #d07a0b; }
+  #btn-decompose:active { background: #b56a09; }
+
+  #output {
+    margin-top: 1.2rem;
+    font-family: "Cascadia Code", "Fira Code", "Menlo", "Consolas", monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    min-height: 2rem;
+  }
+
+  .loading {
+    color: #888;
+    font-style: italic;
+    font-family: system-ui, sans-serif;
+  }
+</style>
+</head>
+<body>
+
+<h1>Character Decomposition</h1>
+
+<div class="mode-row">
+  <label><input type="radio" name="mode" value="kanji"> Kanji</label>
+  <label><input type="radio" name="mode" value="hanzi"> Hanzi</label>
+</div>
+
+<input id="char-input" type="text" maxlength="2" autocomplete="off" spellcheck="false" placeholder="...">
+
+<div class="btn-row">
+  <button id="btn-decompose">Decompose</button>
+  <button id="btn-random">Random</button>
+  <button id="btn-clear">Clear</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+"use strict";
+
+const BINARY = new Set("⿰⿱⿴⿵⿶⿷⿸⿹⿺⿻");
+const TRINARY = new Set("⿲⿳");
+
+let DATA = null;
+let ALL_RADICALS = null;  // Set of all radical chars
+let CANONICAL = null;     // Set of canonical radical chars
+
+// ── Data loading ──
+
+async function loadData() {
+  const out = document.getElementById("output");
+  out.className = "loading";
+  out.textContent = "Loading data...";
+  const resp = await fetch("data.json");
+  DATA = await resp.json();
+  ALL_RADICALS = new Set(DATA.allRadicals || []);
+  CANONICAL = new Set(DATA.canonical || []);
+  out.className = "";
+  out.textContent = "";
+}
+
+// ── IDS parsing (mirrors cj.py) ──
+
+function parseIDS(s, pos) {
+  if (pos === undefined) pos = 0;
+  if (pos >= s.length) throw new Error("unexpected end");
+
+  // Handle surrogate pairs / astral chars properly
+  const cp = s.codePointAt(pos);
+  const c = String.fromCodePoint(cp);
+  const charLen = c.length; // 1 for BMP, 2 for astral
+  const nextPos = pos + charLen;
+
+  if (BINARY.has(c)) {
+    const [a, posA] = parseIDS(s, nextPos);
+    const [b, posB] = parseIDS(s, posA);
+    return [[c, a, b], posB];
+  }
+  if (TRINARY.has(c)) {
+    const [a, posA] = parseIDS(s, nextPos);
+    const [b, posB] = parseIDS(s, posA);
+    const [d, posD] = parseIDS(s, posB);
+    return [[c, a, b, d], posD];
+  }
+  return [c, nextPos];
+}
+
+// ── Collect leaf characters from a parsed IDS tree ──
+
+function leaves(node) {
+  if (typeof node === "string") return [node];
+  const result = [];
+  for (let i = 1; i < node.length; i++) {
+    result.push(...leaves(node[i]));
+  }
+  return result;
+}
+
+// ── Decomposition gating ──
+
+function shouldDecompose(char) {
+  const idsStr = DATA.ids[char];
+  if (!idsStr) return false;
+  if (!ALL_RADICALS.has(char)) return true; // not a radical, always decompose
+  // Radical: only decompose if ALL leaf components are canonical
+  try {
+    const [parsed] = parseIDS(idsStr, 0);
+    const children = leaves(parsed);
+    return children.every(c => CANONICAL.has(c));
+  } catch (e) {
+    return false;
+  }
+}
+
+// ── Tree rendering ──
+
+function renderTree(char, seen) {
+  if (!seen) seen = new Set();
+  const lines = [];
+
+  const gloss = DATA.glosses[char] || "";
+  const glossStr = gloss ? `  (${gloss})` : "";
+  lines.push(char + glossStr);
+
+  if (!seen.has(char) && shouldDecompose(char)) {
+    seen.add(char);
+    try {
+      const [parsed] = parseIDS(DATA.ids[char], 0);
+      const children = leaves(parsed);
+      for (let i = 0; i < children.length; i++) {
+        const isLast = i === children.length - 1;
+        appendChild(lines, children[i], "", isLast, seen);
+      }
+    } catch (e) {
+      // parse error, skip
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function appendChild(lines, char, prefix, isLast, seen) {
+  const connector = isLast ? "└── " : "├── ";
+  const extension = isLast ? "    " : "│   ";
+
+  const gloss = DATA.glosses[char] || "";
+  const glossStr = gloss ? `  (${gloss})` : "";
+  lines.push(prefix + connector + char + glossStr);
+
+  if (seen.has(char)) return;
+  seen.add(char);
+
+  if (!shouldDecompose(char)) return;
+
+  try {
+    const [parsed] = parseIDS(DATA.ids[char], 0);
+    const children = leaves(parsed);
+    for (let i = 0; i < children.length; i++) {
+      const childLast = i === children.length - 1;
+      appendChild(lines, children[i], prefix + extension, childLast, seen);
+    }
+  } catch (e) {
+    // skip
+  }
+}
+
+// ── UI wiring ──
+
+function getMode() {
+  const checked = document.querySelector('input[name="mode"]:checked');
+  return checked ? checked.value : "kanji";
+}
+
+function syncURL(char, decomposed) {
+  const url = new URL(window.location);
+  url.searchParams.delete("c");
+  url.searchParams.delete("d");
+  if (char) {
+    url.searchParams.set(decomposed ? "d" : "c", char);
+  }
+  history.replaceState(null, "", url);
+}
+
+function decompose() {
+  if (!DATA) return;
+  const input = document.getElementById("char-input");
+  const out = document.getElementById("output");
+  const ch = [...input.value.trim()][0]; // first codepoint
+  if (!ch) {
+    out.textContent = "";
+    syncURL("", false);
+    return;
+  }
+  out.textContent = renderTree(ch, null);
+  syncURL(ch, true);
+}
+
+function pickRandom() {
+  if (!DATA) return;
+  const mode = getMode();
+  const list = DATA[mode];
+  const ch = list[Math.floor(Math.random() * list.length)];
+  const input = document.getElementById("char-input");
+  input.value = ch;
+  document.getElementById("output").textContent = "";
+  syncURL(ch, false);
+}
+
+function clearInput() {
+  const input = document.getElementById("char-input");
+  input.value = "";
+  document.getElementById("output").textContent = "";
+  syncURL("", false);
+  input.focus();
+}
+
+let _autoDecompose = false;
+
+function initFromURL() {
+  const params = new URLSearchParams(window.location.search);
+
+  const cjk = params.get("cjk");
+  let mode = "kanji";
+  if (cjk === "c") mode = "hanzi";
+  else if (cjk === "j") mode = "kanji";
+  document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
+
+  const d = params.get("d");
+  const c = params.get("c");
+  // prefer d over c
+  if (d) {
+    document.getElementById("char-input").value = d;
+    _autoDecompose = true;
+  } else if (c) {
+    document.getElementById("char-input").value = c;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  initFromURL();
+  await loadData();
+
+  if (_autoDecompose) decompose();
+
+  document.getElementById("btn-decompose").addEventListener("click", decompose);
+  document.getElementById("btn-random").addEventListener("click", pickRandom);
+  document.getElementById("btn-clear").addEventListener("click", clearInput);
+
+  // Update URL param when mode changes
+  document.querySelectorAll('input[name="mode"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const val = radio.value === "hanzi" ? "c" : "j";
+      const url = new URL(window.location);
+      url.searchParams.set("cjk", val);
+      history.replaceState(null, "", url);
+    });
+  });
+
+  const input = document.getElementById("char-input");
+  input.addEventListener("input", () => {
+    document.getElementById("output").textContent = "";
+    const ch = [...input.value.trim()][0] || "";
+    syncURL(ch, false);
+  });
+
+  // Decompose on Enter
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      decompose();
+    }
+  });
+});
+</script>
+</body>
+</html>
