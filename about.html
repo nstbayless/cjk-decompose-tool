@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About — Character Decomposition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a1a;
+    background: #fafafa;
+  }
+
+  .back {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 1.4rem;
+    display: block;
+  }
+
+  .back a { color: #888; text-decoration: none; }
+  .back a:hover { text-decoration: underline; }
+
+  #content h2 {
+    font-size: 1.4rem;
+    margin-bottom: 0.8rem;
+  }
+
+  #content h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 1.4rem 0 0.6rem;
+    color: #444;
+  }
+
+  #content p {
+    font-size: 0.92rem;
+    line-height: 1.55;
+    margin-bottom: 0.6rem;
+  }
+
+  #content ul {
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  #content li {
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  #content a { color: #c06800; text-decoration: none; }
+  #content a:hover { text-decoration: underline; }
+
+  #content code {
+    font-family: "Cascadia Code", "Fira Code", "Menlo", "Consolas", monospace;
+    font-size: 0.85em;
+    background: #eee;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<span class="back"><a href="index.html">← back</a></span>
+<div id="content"></div>
+<script>
+async function loadAbout() {
+  const resp = await fetch("about.md");
+  const md = await resp.text();
+  document.getElementById("content").innerHTML = parseMarkdown(md);
+}
+
+function parseMarkdown(md) {
+  return md
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // headings
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    // bold + link combo: **[text](url)**
+    .replace(/\*\*\[([^\]]+)\]\(([^)]+)\)\*\*/g, "<strong><a href=\"$2\">$1</a></strong>")
+    // plain bold
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    // inline code (backtick content may include special chars already escaped)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    // links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<a href=\"$2\">$1</a>")
+    // list items
+    .replace(/^- (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>(\n|$))+/gs, m => "<ul>" + m.trimEnd() + "</ul>")
+    // paragraphs: non-empty lines not already wrapped in a block tag
+    .replace(/^(?!<[hul]|$)(.+)$/gm, "<p>$1</p>")
+    .trim();
+}
+
+loadAbout();
+</script>
+</body>
+</html>
