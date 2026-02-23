@@ -21,21 +21,6 @@
     margin-bottom: 1.2rem;
   }
 
-  .mode-row {
-    display: flex;
-    gap: 1.2rem;
-    margin-bottom: 1rem;
-  }
-
-  .mode-row label {
-    cursor: pointer;
-    font-size: 0.95rem;
-  }
-
-  .mode-row input[type="radio"] {
-    margin-right: 0.3rem;
-  }
-
   #char-input {
     display: block;
     width: 100%;
@@ -56,6 +41,7 @@
     display: flex;
     gap: 0.6rem;
     margin-top: 0.8rem;
+    align-items: center;
   }
 
   button {
@@ -78,6 +64,14 @@
   #btn-decompose:hover { background: #d07a0b; }
   #btn-decompose:active { background: #b56a09; }
 
+  #btn-gear {
+    padding: 0.5rem 0.55rem;
+    font-size: 1.05rem;
+    line-height: 1;
+    color: #555;
+    border-color: #bbb;
+  }
+
   #output {
     margin-top: 1.2rem;
     font-family: "Cascadia Code", "Fira Code", "Menlo", "Consolas", monospace;
@@ -93,26 +87,127 @@
     font-style: italic;
     font-family: system-ui, sans-serif;
   }
+
+  /* ── Settings dialog ── */
+
+  dialog {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 0;
+    min-width: 300px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  }
+
+  dialog::backdrop {
+    background: rgba(0,0,0,0.25);
+  }
+
+  .dlg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.9rem 1rem 0.7rem;
+    border-bottom: 1px solid #eee;
+  }
+
+  .dlg-header strong {
+    font-size: 1rem;
+  }
+
+  .dlg-x {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #888;
+    padding: 0 0.2rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .dlg-x:hover { color: #333; background: none; }
+  .dlg-x:active { background: none; }
+
+  .dlg-body {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .dlg-fieldset {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 0.6rem 0.8rem 0.7rem;
+  }
+
+  .dlg-fieldset legend {
+    font-size: 0.8rem;
+    color: #666;
+    padding: 0 0.3rem;
+  }
+
+  .dlg-fieldset label {
+    display: block;
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.15rem 0;
+  }
+
+  .dlg-fieldset input[type="radio"] {
+    margin-right: 0.4rem;
+  }
+
+  .dlg-level-wrap label {
+    display: block;
+    font-size: 0.8rem;
+    color: #666;
+    margin-bottom: 0.3rem;
+  }
+
+  #dlg-level {
+    width: 100%;
+    font-size: 0.95rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
 
 <h1>Character Decomposition</h1>
 
-<div class="mode-row">
-  <label><input type="radio" name="mode" value="kanji"> Kanji</label>
-  <label><input type="radio" name="mode" value="hanzi"> Hanzi</label>
-</div>
-
 <input id="char-input" type="text" maxlength="2" autocomplete="off" spellcheck="false" placeholder="...">
 
 <div class="btn-row">
   <button id="btn-decompose">Decompose</button>
-  <button id="btn-random">Random</button>
   <button id="btn-clear">Clear</button>
+  <button id="btn-random">Random</button>
+  <button id="btn-gear" title="Random settings">&#9881;</button>
 </div>
 
 <div id="output"></div>
+
+<!-- Settings dialog -->
+<dialog id="settings-dialog">
+  <div class="dlg-header">
+    <strong>Random settings</strong>
+    <button class="dlg-x" id="dlg-close" aria-label="Close">&times;</button>
+  </div>
+  <div class="dlg-body">
+    <fieldset class="dlg-fieldset">
+      <legend>Language</legend>
+      <label><input type="radio" name="dlg-cjk" value="j"> Japanese (kanji)</label>
+      <label><input type="radio" name="dlg-cjk" value="simp"> Chinese simplified</label>
+      <label><input type="radio" name="dlg-cjk" value="trad"> Chinese traditional</label>
+    </fieldset>
+    <div class="dlg-level-wrap">
+      <label for="dlg-level">Level / Grade</label>
+      <select id="dlg-level"></select>
+    </div>
+  </div>
+</dialog>
 
 <script>
 "use strict";
@@ -121,8 +216,78 @@ const BINARY = new Set("⿰⿱⿴⿵⿶⿷⿸⿹⿺⿻");
 const TRINARY = new Set("⿲⿳");
 
 let DATA = null;
-let ALL_RADICALS = null;  // Set of all radical chars
-let CANONICAL = null;     // Set of canonical radical chars
+let ALL_RADICALS = null;
+let CANONICAL = null;
+
+// ── Settings state ──
+
+let currentCJK = "j";       // 'j' | 'simp' | 'trad'
+let currentLevel = "joyos"; // URL-param-style key
+
+const DEFAULT_LEVEL = { j: "joyos", simp: "nhsk9", trad: "tocflc" };
+
+// Map URL-param level key → data.json array key
+const LEVEL_KEY = {
+  n5: "jlpt_n5", n4: "jlpt_n4", n3: "jlpt_n3", n2: "jlpt_n2", n1: "jlpt_n1",
+  joyo1: "joyo_1", joyo2: "joyo_2", joyo3: "joyo_3",
+  joyo4: "joyo_4", joyo5: "joyo_5", joyo6: "joyo_6", joyos: "joyo_s",
+  hsk1: "hsk_1", hsk2: "hsk_2", hsk3: "hsk_3",
+  hsk4: "hsk_4", hsk5: "hsk_5", hsk6: "hsk_6",
+  nhsk1: "nhsk_1", nhsk2: "nhsk_2", nhsk3: "nhsk_3",
+  nhsk4: "nhsk_4", nhsk5: "nhsk_5", nhsk6: "nhsk_6",
+  nhsk7: "nhsk_7", nhsk8: "nhsk_8", nhsk9: "nhsk_9",
+  tocfla: "tocfl_a", tocflb: "tocfl_b", tocflc: "tocfl_c",
+};
+
+// Dropdown options per language  [{ group, options: [{value, label}] }]
+const LEVEL_OPTIONS = {
+  j: [
+    { group: "JLPT", options: [
+      { value: "n5",    label: "JLPT N5 (80)" },
+      { value: "n4",    label: "JLPT N4 (cumul. 250)" },
+      { value: "n3",    label: "JLPT N3 (cumul. 619)" },
+      { value: "n2",    label: "JLPT N2 (cumul. 987)" },
+      { value: "n1",    label: "JLPT N1 (all J\u014dy\u014d, 2136)" },
+    ]},
+    { group: "J\u014dy\u014d grade", options: [
+      { value: "joyo1", label: "Grade 1 (80)" },
+      { value: "joyo2", label: "Grade 2 (cumul. 240)" },
+      { value: "joyo3", label: "Grade 3 (cumul. 440)" },
+      { value: "joyo4", label: "Grade 4 (cumul. 642)" },
+      { value: "joyo5", label: "Grade 5 (cumul. 835)" },
+      { value: "joyo6", label: "Grade 6 (cumul. 1026)" },
+      { value: "joyos", label: "Secondary / all J\u014dy\u014d (2136)" },
+    ]},
+  ],
+  simp: [
+    { group: "HSK (2010)", options: [
+      { value: "hsk1", label: "HSK 1" },
+      { value: "hsk2", label: "HSK 2 (cumul.)" },
+      { value: "hsk3", label: "HSK 3 (cumul.)" },
+      { value: "hsk4", label: "HSK 4 (cumul.)" },
+      { value: "hsk5", label: "HSK 5 (cumul.)" },
+      { value: "hsk6", label: "HSK 6 (cumul.)" },
+    ]},
+    { group: "New HSK (2021)", options: [
+      { value: "nhsk1", label: "New HSK 1" },
+      { value: "nhsk2", label: "New HSK 2 (cumul.)" },
+      { value: "nhsk3", label: "New HSK 3 (cumul.)" },
+      { value: "nhsk4", label: "New HSK 4 (cumul.)" },
+      { value: "nhsk5", label: "New HSK 5 (cumul.)" },
+      { value: "nhsk6", label: "New HSK 6 (cumul.)" },
+      { value: "nhsk7", label: "New HSK 7 (cumul.)" },
+      { value: "nhsk8", label: "New HSK 8 (cumul.)" },
+      { value: "nhsk9", label: "New HSK 9 (cumul.)" },
+    ]},
+  ],
+  trad: [
+    { group: "TOCFL", options: [
+      { value: "tocfla", label: "Band A" },
+      { value: "tocflb", label: "Band B (cumul.)" },
+      { value: "tocflc", label: "Band C (cumul.)" },
+    ]},
+  ],
+};
 
 // ── Data loading ──
 
@@ -144,10 +309,9 @@ function parseIDS(s, pos) {
   if (pos === undefined) pos = 0;
   if (pos >= s.length) throw new Error("unexpected end");
 
-  // Handle surrogate pairs / astral chars properly
   const cp = s.codePointAt(pos);
   const c = String.fromCodePoint(cp);
-  const charLen = c.length; // 1 for BMP, 2 for astral
+  const charLen = c.length;
   const nextPos = pos + charLen;
 
   if (BINARY.has(c)) {
@@ -164,24 +328,17 @@ function parseIDS(s, pos) {
   return [c, nextPos];
 }
 
-// ── Collect leaf characters from a parsed IDS tree ──
-
 function leaves(node) {
   if (typeof node === "string") return [node];
   const result = [];
-  for (let i = 1; i < node.length; i++) {
-    result.push(...leaves(node[i]));
-  }
+  for (let i = 1; i < node.length; i++) result.push(...leaves(node[i]));
   return result;
 }
-
-// ── Decomposition gating ──
 
 function shouldDecompose(char) {
   const idsStr = DATA.ids[char];
   if (!idsStr) return false;
-  if (!ALL_RADICALS.has(char)) return true; // not a radical, always decompose
-  // Radical: only decompose if ALL leaf components are canonical
+  if (!ALL_RADICALS.has(char)) return true;
   try {
     const [parsed] = parseIDS(idsStr, 0);
     const children = leaves(parsed);
@@ -196,7 +353,6 @@ function shouldDecompose(char) {
 function renderTree(char, seen) {
   if (!seen) seen = new Set();
   const lines = [];
-
   const gloss = DATA.glosses[char] || "";
   const glossStr = gloss ? `  (${gloss})` : "";
   lines.push(char + glossStr);
@@ -207,80 +363,75 @@ function renderTree(char, seen) {
       const [parsed] = parseIDS(DATA.ids[char], 0);
       const children = leaves(parsed);
       for (let i = 0; i < children.length; i++) {
-        const isLast = i === children.length - 1;
-        appendChild(lines, children[i], "", isLast, seen);
+        appendChild(lines, children[i], "", i === children.length - 1, seen);
       }
-    } catch (e) {
-      // parse error, skip
-    }
+    } catch (e) {}
   }
-
   return lines.join("\n");
 }
 
 function appendChild(lines, char, prefix, isLast, seen) {
   const connector = isLast ? "└── " : "├── ";
   const extension = isLast ? "    " : "│   ";
-
   const gloss = DATA.glosses[char] || "";
   const glossStr = gloss ? `  (${gloss})` : "";
   lines.push(prefix + connector + char + glossStr);
 
   if (seen.has(char)) return;
   seen.add(char);
-
   if (!shouldDecompose(char)) return;
 
   try {
     const [parsed] = parseIDS(DATA.ids[char], 0);
     const children = leaves(parsed);
     for (let i = 0; i < children.length; i++) {
-      const childLast = i === children.length - 1;
-      appendChild(lines, children[i], prefix + extension, childLast, seen);
+      appendChild(lines, children[i], prefix + extension, i === children.length - 1, seen);
     }
-  } catch (e) {
-    // skip
-  }
+  } catch (e) {}
 }
 
-// ── UI wiring ──
-
-function getMode() {
-  const checked = document.querySelector('input[name="mode"]:checked');
-  return checked ? checked.value : "kanji";
-}
+// ── URL sync ──
 
 function syncURL(char, decomposed) {
   const url = new URL(window.location);
   url.searchParams.delete("c");
   url.searchParams.delete("d");
-  if (char) {
-    url.searchParams.set(decomposed ? "d" : "c", char);
-  }
+  if (char) url.searchParams.set(decomposed ? "d" : "c", char);
+  url.searchParams.set("cjk", currentCJK);
+  url.searchParams.set("l", currentLevel);
   history.replaceState(null, "", url);
 }
+
+function syncURLSettings() {
+  const url = new URL(window.location);
+  url.searchParams.set("cjk", currentCJK);
+  url.searchParams.set("l", currentLevel);
+  history.replaceState(null, "", url);
+}
+
+// ── Core actions ──
 
 function decompose() {
   if (!DATA) return;
   const input = document.getElementById("char-input");
   const out = document.getElementById("output");
-  const ch = [...input.value.trim()][0]; // first codepoint
-  if (!ch) {
-    out.textContent = "";
-    syncURL("", false);
-    return;
-  }
+  const ch = [...input.value.trim()][0];
+  if (!ch) { out.textContent = ""; syncURL("", false); return; }
   out.textContent = renderTree(ch, null);
   syncURL(ch, true);
 }
 
 function pickRandom() {
   if (!DATA) return;
-  const mode = getMode();
-  const list = DATA[mode];
+  const key = LEVEL_KEY[currentLevel];
+  const list = key ? (DATA[key] || []) : [];
+  if (!list.length) {
+    document.getElementById("output").textContent =
+      "(no data for this level yet — see about.md)";
+    return;
+  }
   const ch = list[Math.floor(Math.random() * list.length)];
-  const input = document.getElementById("char-input");
-  input.value = ch;
+  document.getElementById("char-input").value = ch;
   document.getElementById("output").textContent = "";
   syncURL(ch, false);
 }
@@ -293,20 +444,58 @@ function clearInput() {
   input.focus();
 }
 
+// ── Settings dialog ──
+
+function populateLevelSelect(selectEl, cjk, selectedLevel) {
+  selectEl.innerHTML = "";
+  for (const group of LEVEL_OPTIONS[cjk]) {
+    const og = document.createElement("optgroup");
+    og.label = group.group;
+    for (const opt of group.options) {
+      const o = document.createElement("option");
+      o.value = opt.value;
+      o.textContent = opt.label;
+      if (opt.value === selectedLevel) o.selected = true;
+      og.appendChild(o);
+    }
+    selectEl.appendChild(og);
+  }
+}
+
+function openSettings() {
+  const dialog = document.getElementById("settings-dialog");
+  const sel = document.getElementById("dlg-level");
+
+  // Sync dialog state to current settings
+  document.querySelector(`input[name="dlg-cjk"][value="${currentCJK}"]`).checked = true;
+  populateLevelSelect(sel, currentCJK, currentLevel);
+
+  dialog.showModal();
+}
+
+// ── URL init ──
+
 let _autoDecompose = false;
 
 function initFromURL() {
   const params = new URLSearchParams(window.location.search);
 
-  const cjk = params.get("cjk");
-  let mode = "kanji";
-  if (cjk === "c") mode = "hanzi";
-  else if (cjk === "j") mode = "kanji";
-  document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
+  // cjk param: j | simp | trad  (old 'c' → trad for backward compat)
+  const cjkParam = params.get("cjk");
+  if (cjkParam === "simp") currentCJK = "simp";
+  else if (cjkParam === "trad" || cjkParam === "c") currentCJK = "trad";
+  else currentCJK = "j";
+
+  // l param
+  const lParam = params.get("l");
+  if (lParam && LEVEL_KEY[lParam] !== undefined) {
+    currentLevel = lParam;
+  } else {
+    currentLevel = DEFAULT_LEVEL[currentCJK];
+  }
 
   const d = params.get("d");
   const c = params.get("c");
-  // prefer d over c
   if (d) {
     document.getElementById("char-input").value = d;
     _autoDecompose = true;
@@ -315,24 +504,40 @@ function initFromURL() {
   }
 }
 
+// ── Boot ──
+
 document.addEventListener("DOMContentLoaded", async () => {
   initFromURL();
   await loadData();
-
   if (_autoDecompose) decompose();
 
   document.getElementById("btn-decompose").addEventListener("click", decompose);
   document.getElementById("btn-random").addEventListener("click", pickRandom);
   document.getElementById("btn-clear").addEventListener("click", clearInput);
+  document.getElementById("btn-gear").addEventListener("click", openSettings);
+  document.getElementById("dlg-close").addEventListener("click", () => {
+    document.getElementById("settings-dialog").close();
+  });
 
-  // Update URL param when mode changes
-  document.querySelectorAll('input[name="mode"]').forEach((radio) => {
+  // Language radio change in dialog
+  document.querySelectorAll('input[name="dlg-cjk"]').forEach(radio => {
     radio.addEventListener("change", () => {
-      const val = radio.value === "hanzi" ? "c" : "j";
-      const url = new URL(window.location);
-      url.searchParams.set("cjk", val);
-      history.replaceState(null, "", url);
+      currentCJK = radio.value;
+      currentLevel = DEFAULT_LEVEL[currentCJK];
+      populateLevelSelect(document.getElementById("dlg-level"), currentCJK, currentLevel);
+      syncURLSettings();
     });
+  });
+
+  // Level select change in dialog
+  document.getElementById("dlg-level").addEventListener("change", (e) => {
+    currentLevel = e.target.value;
+    syncURLSettings();
+  });
+
+  // Close dialog on backdrop click
+  document.getElementById("settings-dialog").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.close();
   });
 
   const input = document.getElementById("char-input");
@@ -342,12 +547,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     syncURL(ch, false);
   });
 
-  // Decompose on Enter
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      decompose();
-    }
+    if (e.key === "Enter") { e.preventDefault(); decompose(); }
   });
 });
 </script>
