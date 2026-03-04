@@ -4,7 +4,7 @@ Vibecoded with Claude Opus 4.6.
 
 ### Data sources
 
-- **IDS decomposition data** — [CJKVI IDS Database](https://github.com/cjkvi/cjkvi-ids), based on the [CHISE IDS Database](http://www.chise.org/ids/). Provides Ideographic Description Sequences mapping CJK characters to their structural components.
+- **IDS decomposition data** — [BabelStone IDS](https://www.babelstone.co.uk/CJK/IDS.TXT) by Andrew West. 97,680 Ideographic Description Sequences covering all CJK Unified Ideographs through Unicode 16.0. Uses 122 unencoded sub-character components (represented as `〇` in the decomposition tree) for stroke-level fragments that Unicode has not assigned codepoints to.
 
 - **Character readings, frequency, stroke counts, and English definitions** — [Unicode Han Database (Unihan)](https://www.unicode.org/charts/unihan.html), downloaded from [unicode.org](https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip). Fields used: `kMandarin`, `kJapaneseOn`, `kJapaneseKun`, `kFrequency`, `kTotalStrokes`, `kJoyoKanji`, `kDefinition`.
 

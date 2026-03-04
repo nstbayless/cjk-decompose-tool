@@ -10,7 +10,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 CACHE_DIR = SCRIPT_DIR / ".cache"
 DICTS_DIR = SCRIPT_DIR / "dicts"
-IDS_DEFAULT = Path("/home/n/git/clong-radical/ids.txt")
+IDS_DEFAULT = SCRIPT_DIR / ".cache" / "babelstone_ids.txt"
 
 BAD_CHARS = set("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑲")
 
@@ -70,10 +70,19 @@ def load_radicals(path):
     return radicals
 
 
+def _clean_ids(raw):
+    """Strip BabelStone/cjkvi-ids annotations from a raw IDS field."""
+    raw = re.sub(r"\^\s*", "", raw)
+    raw = re.sub(r"[$][(][^)]*[)]\s*$", "", raw)
+    raw = raw.lstrip("〾㇯")
+    raw = re.sub(r"\[.*?]$", "", raw)
+    return raw
+
+
 def load_ids(ids_path):
     """Load raw preferred IDS decomposition strings."""
     ids = {}
-    with open(ids_path) as f:
+    with open(ids_path, encoding="utf-8-sig") as f:
         for line in f:
             if not line.startswith("U"):
                 continue
@@ -82,15 +91,16 @@ def load_ids(ids_path):
             if not m:
                 continue
             char = m.group(1)
-            decomps = m.group(2).split()
-            decomp = decomps[0]
-            for d in decomps:
-                if not any(c in d for c in BAD_CHARS):
+            raw_fields = m.group(2).split("\t")
+            alts = [_clean_ids(f) for f in raw_fields]
+            decomp = alts[0]
+            for d in alts:
+                if "{" not in d and not any(c in d for c in BAD_CHARS):
                     decomp = d
                     break
-            decomp = re.sub(r"\[.*?]$", "", decomp)
-            if len(decomp) <= 1:
+            if len(decomp) <= 1 or decomp == char:
                 continue
+            decomp = re.sub(r"\{[0-9]+\}", "〇", decomp)
             ids[char] = decomp
     return ids
 

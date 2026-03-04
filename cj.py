@@ -14,13 +14,15 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CACHE_DIR = SCRIPT_DIR / ".cache"
-IDS_DEFAULT = Path("/home/n/git/clong-radical/ids.txt")
+IDS_DEFAULT = SCRIPT_DIR / ".cache" / "babelstone_ids.txt"
+BABELSTONE_URL = "https://www.babelstone.co.uk/CJK/IDS.TXT"
 
 UNIHAN_URL = "https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip"
 RADICALS_URL = "https://www.unicode.org/Public/UCD/latest/ucd/CJKRadicals.txt"
 
-BINARY_IDS = set("⿰⿱⿴⿵⿶⿷⿸⿹⿺⿻")
+BINARY_IDS = set("⿰⿱⿴⿵⿶⿷⿸⿹⿺⿻⿼⿽")
 TRINARY_IDS = set("⿲⿳")
+UNARY_IDS = set("⿾⿿")
 BAD_CHARS = set("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑲")
 
 
@@ -52,9 +54,11 @@ def load_radicals():
                 canonical.add(line.strip())
         return radicals, canonical
 
-    print("Downloading CJKRadicals.txt...", file=sys.stderr)
-    resp = urllib.request.urlopen(RADICALS_URL)
-    raw = resp.read().decode("utf-8")
+    radicals_src = CACHE_DIR / "CJKRadicals.txt"
+    if not radicals_src.exists():
+        print("Downloading CJKRadicals.txt...", file=sys.stderr)
+        urllib.request.urlretrieve(RADICALS_URL, radicals_src)
+    raw = radicals_src.read_text("utf-8")
 
     # Parse CJKRadicals.txt:
     #   radical_number; kangxi_radical_codepoint; cjk_unified_ideograph_codepoint
@@ -124,34 +128,9 @@ def load_radicals():
             radicals[ch] = f"CJK radical: {gloss}"
             canonical.add(ch)
 
-    # Merge radical variants from kRSUnicode (often in CJK Extension B,
-    # e.g. 𠃌 = 5.0, 𠂊 = 4.1).
-    rs_file = CACHE_DIR / "rs_variants.txt"
-    if rs_file.exists():
-        for line in open(rs_file):
-            parts = line.strip().split("\t")
-            if len(parts) < 3:
-                continue
-            ch = parts[0]
-            if ch in radicals:
-                continue  # already have a label from CJKRadicals.txt
-            rad = int(parts[1])
-            residual = int(parts[2])
-            defn = parts[3] if len(parts) > 3 else ""
-            if defn:
-                continue  # has a definition → real character, not a component
-            if residual > 2:
-                continue  # too far from the radical form
-            gloss = radical_names.get(rad, "")
-            if not gloss:
-                continue
-            if residual == 0:
-                label = f"{rad}.0 (variant): {gloss}"
-            else:
-                label = f"{rad}.{residual} (variant): {gloss}"
-            if defn:
-                label += f" — {defn}"
-            radicals[ch] = label
+    # Note: rs_variants.txt (kRSUnicode residual-stroke heuristic) was removed
+    # because stroke-count checks are unreliable for identifying radical variants.
+    # CJKRadicals.txt + CJK Radicals Supplement block are the authoritative sources.
 
     with open(cache, "w") as f:
         for ch, label in sorted(radicals.items(), key=lambda x: ord(x[0])):
@@ -166,7 +145,17 @@ def load_radicals():
     return radicals, canonical
 
 
-# --- Unihan download & caching ---
+# --- Downloads & caching ---
+
+def ensure_ids():
+    """Download BabelStone IDS.TXT if not already cached."""
+    CACHE_DIR.mkdir(exist_ok=True)
+    if IDS_DEFAULT.exists():
+        return
+    print("Downloading BabelStone IDS data...", file=sys.stderr)
+    urllib.request.urlretrieve(BABELSTONE_URL, IDS_DEFAULT)
+    print(f"Saved to {IDS_DEFAULT}", file=sys.stderr)
+
 
 def ensure_unihan():
     """Download Unihan data and build frequency-sorted character lists."""
@@ -333,13 +322,35 @@ def parse_ids(s):
         b, m = parse_ids(s[n:])
         d, k = parse_ids(s[n + m:])
         return [c, a, b, d], n + m + k + 1
+    if c in UNARY_IDS:
+        a, n = parse_ids(s)
+        return [c, a], n + 1
     return c, 1
 
 
+def _clean_babelstone_ids(raw):
+    """Strip BabelStone annotations from a raw IDS field.
+
+    Input:  '^⿰亻㠯$(GMJKP)' or '〾⿻一乚'
+    Output: '⿰亻㠯'
+    """
+    # Strip ^...$(sources) wrapper
+    raw = re.sub(r"\^\s*", "", raw)
+    raw = re.sub(r"[$][(][^)]*[)]\s*$", "", raw)
+    # Strip variation/mirroring markers
+    raw = raw.lstrip("〾㇯")
+    # Strip trailing [...] annotations (cjkvi-ids compat)
+    raw = re.sub(r"\[.*?]$", "", raw)
+    return raw
+
+
 def load_ids(ids_path):
-    """Load IDS decompositions from ids.txt into {char: parsed_tree}."""
+    """Load IDS decompositions into {char: parsed_tree}.
+
+    Supports both cjkvi-ids and BabelStone IDS.TXT formats.
+    """
     ids = {}
-    with open(ids_path) as f:
+    with open(ids_path, encoding="utf-8-sig") as f:
         for line in f:
             if not line.startswith("U"):
                 continue
@@ -348,16 +359,20 @@ def load_ids(ids_path):
             if not m:
                 continue
             char = m.group(1)
-            decomps = m.group(2).split()
-            # prefer decomposition without placeholder chars
-            decomp = decomps[0]
-            for d in decomps:
-                if not any(c in d for c in BAD_CHARS):
+            # Tab-separated alternative decompositions
+            raw_fields = m.group(2).split("\t")
+            # Clean each alternative
+            alts = [_clean_babelstone_ids(f) for f in raw_fields]
+            # Prefer decomposition without {N} placeholders or BAD_CHARS
+            decomp = alts[0]
+            for d in alts:
+                if "{" not in d and not any(c in d for c in BAD_CHARS):
                     decomp = d
                     break
-            decomp = re.sub(r"\[.*?]$", "", decomp)
-            if len(decomp) <= 1:
+            if len(decomp) <= 1 or decomp == char:
                 continue  # trivial / self-referencing
+            # Replace {N} placeholders with a single placeholder char
+            decomp = re.sub(r"\{[0-9]+\}", "〇", decomp)
             try:
                 parsed, _ = parse_ids(decomp)
                 ids[char] = parsed
@@ -439,6 +454,7 @@ def main():
                         help="specific character instead of random")
     args = parser.parse_args()
 
+    ensure_ids()
     chars, glosses, all_radicals, canonical = load_char_list(args.mode)
     ids = load_ids(args.ids)
 

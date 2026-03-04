@@ -1,0 +1,98 @@
+U+4E09	三	three
+U+4E40	乀	stretch
+U+4E41	乁
+U+4E42	乂	govern, control, manage; nurture
+U+4E44	乄	SHIME: to find a place to dwell; sum; a measurement of paper; SHITE to do; (not to be confused with U3024 HANGZHOU NUMERAL FIVE)
+U+4E45	久	long time (ago); time passage, grow late
+U+4E46	乆	long time (ago); time passage, grow late
+U+4E5A	乚	hidden, mysterious, secret; to conceal; small; minute
+U+4E5B	乛	kwukyel
+U+4E5C	乜	to squint; (Cant.) what? huh?
+U+4E5D	九	nine
+U+4E61	乡	country; rural; village
+U+51F8	凸	protrude, bulge out, convex
+U+51F9	凹	concave, hollow, depressed; a pass, valley
+U+534D	卍	swastika, one of the auspicious signs recognized (e.g. in Chinese Tathagata Buddhism) as being on the chest of Buddha (and variously seen in statuary on the chest, soles of the feet, or palms of the hands)
+U+53CA	及	extend; reach; come up to; and
+U+5DF2	已	already; finished; stop
+U+5DF3	巳	sixth earthly branch
+U+5FC4	忄	heart; radical number 61
+U+623C	戼	fourth earthly branch
+U+6535	攵	rap, tap; radical number 66
+U+6BCC	毌	old form of 貫; component in 贯,貫,實, etc.; not to be confused with 毋
+U+6BCD	母	mother; female elders; female
+U+6C11	民	people, subjects, citizens
+U+6C35	氵	water; radical number 85
+U+706C	灬	fire; radical number 86
+U+725C	牜	an ox, a cow Radical 93
+U+72AD	犭	dog; radical number 94
+U+793B	礻	cult; radical number 113
+U+8A01	訁	Kangxi radical 149
+U+8FB6	辶	walk; walking; Kangxi radical 162
+U+91D2	釒	Kangxi radical 167
+U+961D	阝	place; Kangxi radical 170
+U+98E0	飠	eat, food; radical number 184
+U+3405	㐅	(ancient form of 五) five
+U+353E	㔾	(same as 筄) last name; Kangxi radical 26; a joint, a seal, (ancient form of 節)
+U+20000	𠀀	the sound made by breathing in; oh! (see ㄛ BOPOMOFO LETTER O)
+U+20006	𠀆
+U+20008	𠀈
+U+20067	𠁧
+U+2007E	𠁾
+U+20080	𠂀
+U+20082	𠂂
+U+200C9	𠃉
+U+200CA	𠃊
+U+200CB	𠃋
+U+200CC	𠃌
+U+200CD	𠃍
+U+200CE	𠃎
+U+200D1	𠃑
+U+200E2	𠃢
+U+2010C	𠄌	hook
+U+2010E	𠄎
+U+201A2	𠆢
+U+20674	𠙴
+U+2092C	𠤬
+U+20953	𠥓
+U+2097B	𠥻
+U+2097D	𠥽
+U+20992	𠦒
+U+215D2	𡗒
+U+2163C	𡘼
+U+21FE8	𡿨
+U+22330	𢌰
+U+22397	𢎗
+U+2239C	𢎜
+U+223B1	𢎱
+U+239B6	𣦶
+U+23AEC	𣫬
+U+248E9	𤣩
+U+249A1	𤦡
+U+24C03	𤰃
+U+2574C	𥝌
+U+25AD7	𥫗	bamboo; surname
+U+25E28	𥸨
+U+2626D	𦉭
+U+26AF5	𦫵
+U+27607	𧘇
+U+2820F	𨈏
+U+2890F	𨤏
+U+291E7	𩇧
+U+2A6A6	𪚦
+U+2A6D7	𪛗	Gongche character he with downward slash
+U+2A6D8	𪛘	Gongche character si with downward slash
+U+2A6D9	𪛙	Gongche character yi with downward slash
+U+2A6DA	𪛚	Gongche character shang with downward slash
+U+2A6DB	𪛛	Gongche character che with downward slash
+U+2A6DC	𪛜	Gongche character gong with downward slash
+U+2A6DD	𪛝	Gongche character fan with downward slash
+U+2A700	𪜀
+U+2CF01	𬼁	dram (apothecary symbol ʒ)
+U+2CF02	𬼂
+U+2CF04	𬼄	ounce (apothecary symbol ℥)
+U+2CF18	𬼘
+U+2DF3D	𭼽
+U+2E34C	𮍌
+U+2E3B3	𮎳
+U+2E815	𮠕
