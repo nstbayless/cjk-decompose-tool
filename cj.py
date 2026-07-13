@@ -28,6 +28,26 @@ BAD_CHARS = set("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑲")
 
 # --- Kangxi radical lookup ---
 
+# CJK Radicals Supplement glyphs whose Unicode names don't correspond to
+# their Kangxi radical's name, mapped by usage — BabelStone IDS treats each
+# as a positional form of that radical (e.g. 冬 = ⿱夂⺀ where the K source
+# writes ⿱夂冫).
+SUPPLEMENT_KANGXI = {
+    "repeat": 15,     # ⺀ bottom form of 冫 ice
+    "person": 9,      # ⺅ = 亻 man
+    "box": 13,        # ⺆ = 冂 down box
+    "snake": 49,      # ⺒ form of 己/巳 oneself
+    "thread": 52,     # ⺓ = 幺 short thread
+    "choke": 71,      # ⺛ form of 旡/无 not
+    "mother": 80,     # ⺟ = 母, filed under 毋 do not
+    "civilian": 83,   # ⺠ = 民, filed under 氏 clan
+    "paw": 87,        # ⺤⺥ = 爪 claw
+    "mesh": 122,      # ⺵ = 罒 net
+    "ram": 123,       # ⺷ = 羊 sheep
+    "ewe": 123,       # ⺸ = 羊 sheep
+}
+
+
 def load_radicals():
     """Build {char: gloss_label} and a set of canonical radical chars.
 
@@ -117,16 +137,22 @@ def load_radicals():
         if not name.startswith("CJK RADICAL "):
             continue
         gloss = name.replace("CJK RADICAL ", "").lower()
-        # Try to find the matching Kangxi radical number
-        for num, kg in radical_names.items():
-            if kg == gloss:
-                radicals[ch] = f"{num}: {gloss}"
-                canonical.add(ch)
-                break
+        # Match the glyph to its Kangxi radical number. Supplement names
+        # enumerate variant forms ("knife one", "net four") and prefix
+        # simplifications ("simplified walk") — strip both before matching
+        # the Kangxi name. The rest use names unrelated to their Kangxi
+        # counterpart and are mapped by SUPPLEMENT_KANGXI. Matched forms
+        # display the Kangxi base name (⺀ shows "ice", not "repeat").
+        base = re.sub(r"\s+(one|two|three|four|five)$", "", gloss)
+        base = re.sub(r"^(c-|j-)?simplified\s+", "", base)
+        num = next((n for n, kg in radical_names.items()
+                    if kg in (gloss, base)), SUPPLEMENT_KANGXI.get(base))
+        if num is not None:
+            radicals[ch] = f"{num}: {radical_names.get(num, base)}"
         else:
-            # No exact match; still label it as a radical variant
-            radicals[ch] = f"CJK radical: {gloss}"
-            canonical.add(ch)
+            # Genuinely numberless form; label with its bare name.
+            radicals[ch] = gloss
+        canonical.add(ch)
 
     # Note: rs_variants.txt (kRSUnicode residual-stroke heuristic) was removed
     # because stroke-count checks are unreliable for identifying radical variants.
@@ -162,8 +188,9 @@ def ensure_unihan():
     CACHE_DIR.mkdir(exist_ok=True)
     hanzi_file = CACHE_DIR / "hanzi_freq.txt"
     kanji_file = CACHE_DIR / "kanji_freq.txt"
+    readings_file = CACHE_DIR / "readings.txt"
 
-    if hanzi_file.exists() and kanji_file.exists():
+    if hanzi_file.exists() and kanji_file.exists() and readings_file.exists():
         return
 
     print("Downloading Unihan data (one-time)...", file=sys.stderr)
@@ -171,6 +198,7 @@ def ensure_unihan():
     zip_data = io.BytesIO(resp.read())
 
     mandarin = {}
+    japanese = {}
     japanese_on = {}
     japanese_kun = {}
     frequency = {}
@@ -198,6 +226,8 @@ def ensure_unihan():
                         continue
                     if field == "kMandarin":
                         mandarin[ch] = value
+                    elif field == "kJapanese":
+                        japanese[ch] = value
                     elif field == "kJapaneseOn":
                         japanese_on[ch] = value
                     elif field == "kJapaneseKun":
@@ -242,12 +272,13 @@ def ensure_unihan():
     count = 0
     with open(rs_file, "w") as f:
         for ch, val in rs_unicode.items():
-            # val can be e.g. "5.0" or "61.0 61.0" (multiple entries)
+            # val can be e.g. "5.0" or "61.0 61.0" (multiple entries).
+            # The radical number may carry primes marking simplified/variant
+            # radical forms (纟 = 120'.0, 绞 = 120'.6) — same radical number.
             for entry in val.split():
-                entry = entry.rstrip("'")
                 try:
                     rad_s, res_s = entry.split(".")
-                    rad = int(rad_s)
+                    rad = int(rad_s.rstrip("'"))
                     residual = int(res_s)
                 except ValueError:
                     continue
@@ -263,8 +294,20 @@ def ensure_unihan():
         for ch, defn in definition.items():
             f.write(f"{ch}\t{defn}\n")
 
+    # Save readings: char \t pinyin \t japanese. Japanese prefers kJapanese
+    # (kana, Unicode 15.1+); falls back to kJapaneseOn/kJapaneseKun romaji.
+    reading_chars = set(mandarin) | set(japanese) | set(japanese_on) | set(japanese_kun)
+    with open(readings_file, "w") as f:
+        for ch in sorted(reading_chars):
+            ja = japanese.get(ch)
+            if not ja:
+                ja = " ".join(x for x in (japanese_on.get(ch, ""),
+                                          japanese_kun.get(ch, "")) if x)
+            f.write(f"{ch}\t{mandarin.get(ch, '')}\t{ja}\n")
+
     print(f"Cached {len(hanzi_sorted)} hanzi, {len(kanji_sorted)} kanji, "
-          f"{count} rs entries, {len(definition)} definitions.",
+          f"{count} rs entries, {len(definition)} definitions, "
+          f"{len(reading_chars)} readings.",
           file=sys.stderr)
 
 
@@ -337,11 +380,32 @@ def _clean_babelstone_ids(raw):
     # Strip ^...$(sources) wrapper
     raw = re.sub(r"\^\s*", "", raw)
     raw = re.sub(r"[$][(][^)]*[)]\s*$", "", raw)
-    # Strip variation/mirroring markers
-    raw = raw.lstrip("〾㇯")
+    # Strip the leading 〾 variation indicator (the rest is a valid IDS).
+    # The ㇯ subtraction operator is left in place so load_ids can filter the
+    # field out — stripping it would silently mangle "A minus B" into "AB".
+    raw = raw.lstrip("〾")
     # Strip trailing [...] annotations (cjkvi-ids compat)
     raw = re.sub(r"\[.*?]$", "", raw)
     return raw
+
+
+def load_pua_map(ids_path):
+    """Parse the {NN} -> PUA codepoint table from the BabelStone IDS header.
+
+    Header lines look like:
+      #\t{45}\tleft of 北 [G source glyph] (F5FB )\t？
+    where the parenthesized field gives the codepoint of the component's glyph
+    in the BabelStone Han PUA font.
+    """
+    pua = {}
+    with open(ids_path, encoding="utf-8-sig") as f:
+        for line in f:
+            if line.startswith("U"):
+                break  # token table lives entirely in the header
+            m = re.match(r"^#\t\{(\d+)\}\t.*\(([0-9A-F]{4,5}) ", line)
+            if m:
+                pua[m.group(1)] = chr(int(m.group(2), 16))
+    return pua
 
 
 def load_ids(ids_path):
@@ -349,6 +413,7 @@ def load_ids(ids_path):
 
     Supports both cjkvi-ids and BabelStone IDS.TXT formats.
     """
+    pua = load_pua_map(ids_path)
     ids = {}
     with open(ids_path, encoding="utf-8-sig") as f:
         for line in f:
@@ -361,8 +426,12 @@ def load_ids(ids_path):
             char = m.group(1)
             # Tab-separated alternative decompositions
             raw_fields = m.group(2).split("\t")
-            # Clean each alternative
-            alts = [_clean_babelstone_ids(f) for f in raw_fields]
+            # Clean each alternative, dropping fields the tree parser cannot
+            # represent: ㇯ subtractions ("A minus B") and unknown-form ？.
+            alts = [d for d in (_clean_babelstone_ids(f) for f in raw_fields)
+                    if "㇯" not in d and "？" not in d]
+            if not alts:
+                continue
             # Prefer decomposition without {N} placeholders or BAD_CHARS
             decomp = alts[0]
             for d in alts:
@@ -371,8 +440,9 @@ def load_ids(ids_path):
                     break
             if len(decomp) <= 1 or decomp == char:
                 continue  # trivial / self-referencing
-            # Replace {N} placeholders with a single placeholder char
-            decomp = re.sub(r"\{[0-9]+\}", "〇", decomp)
+            # Replace {N} tokens with their BabelStone Han PUA glyph
+            decomp = re.sub(r"\{([0-9]+)\}",
+                            lambda m: pua.get(m.group(1), "〇"), decomp)
             try:
                 parsed, _ = parse_ids(decomp)
                 ids[char] = parsed

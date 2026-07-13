@@ -4,7 +4,7 @@ Vibecoded with Claude Opus 4.6.
 
 ### Data sources
 
-- **IDS decomposition data** — [BabelStone IDS](https://www.babelstone.co.uk/CJK/IDS.TXT) by Andrew West. 97,680 Ideographic Description Sequences covering all CJK Unified Ideographs through Unicode 16.0. Uses 122 unencoded sub-character components (represented as `〇` in the decomposition tree) for stroke-level fragments that Unicode has not assigned codepoints to.
+- **IDS decomposition data** — [BabelStone IDS](https://www.babelstone.co.uk/CJK/IDS.TXT) by Andrew West. 97,680 Ideographic Description Sequences covering all CJK Unified Ideographs through Unicode 16.0. Uses ~120 unencoded sub-character components (e.g. the left half of 北) for fragments that Unicode has not assigned codepoints to; these are mapped to their Private Use Area codepoints and rendered with glyphs from a bundled subset of [BabelStone Han PUA](https://www.babelstone.co.uk/Fonts/PUA.html).
 
 - **Character readings, frequency, stroke counts, and English definitions** — [Unicode Han Database (Unihan)](https://www.unicode.org/charts/unihan.html), downloaded from [unicode.org](https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip). Fields used: `kMandarin`, `kJapaneseOn`, `kJapaneseKun`, `kFrequency`, `kTotalStrokes`, `kJoyoKanji`, `kDefinition`.
 
@@ -17,5 +17,7 @@ Vibecoded with Claude Opus 4.6.
 - **HSK vocabulary lists (2012 standard, levels 1–6)** — [glxxyz/hskhsk.com](https://github.com/glxxyz/hskhsk.com), `HSK Official 2012 L1.txt`–`L6.txt`. Based on the Hanban 2012 publication. CJK characters are extracted from each level's word list to form the per-level character sets (cumulative: L2 includes all L1 characters, etc.).
 
 - **New HSK hanzi lists (2021 standard, levels 1–9)** — [krmanik/HSK-3.0](https://github.com/krmanik/HSK-3.0), `New HSK (2021)/HSK Hanzi/` files. Pre-extracted character lists, 300 characters per level for levels 1–6, and 1200 characters for the combined levels 7–9 block (the official standard groups 7–9 together; nhsk_7/8/9 therefore share the same cumulative set).
+
+- **Bundled web fonts** — glyphs for rare components (CJK Extensions A/B, CJK Strokes block) that most system fonts lack are served from subsets of [BabelStone Han](https://www.babelstone.co.uk/Fonts/Han.html) and [BabelStone Han PUA](https://www.babelstone.co.uk/Fonts/PUA.html) by Andrew West (Arphic Public License) and [Jigmo](https://kamichikoichi.github.io/jigmo/) by Koichi Kamichi (CC0). The subsets cover every character reachable from the level lists' decomposition trees; full licenses are in `fonts/`.
 
 - **TOCFL vocabulary list** — [ivankra/tocfl](https://github.com/ivankra/tocfl), `tocfl-202307.csv` (July 2023). Vocabulary for Taiwan's Test of Chinese as a Foreign Language, in Traditional Chinese. Level mapping: L0 = Novice (excluded); L1+L2 = Band A; L1–L4 = Band B (cumulative); L1–L5 = Band C (cumulative). CJK characters are extracted from each entry's Traditional form.

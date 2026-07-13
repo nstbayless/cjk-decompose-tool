@@ -5,6 +5,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Character Decomposition</title>
 <style>
+  /* Bundled fallback fonts covering every character the decomposition trees
+     can display (incl. CJK Ext A/B and the CJK Strokes block, which most
+     system fonts lack). Listed AFTER the system CJK fonts in each stack, so
+     they are only used for glyphs the system cannot render.
+     Subset from BabelStone Han and Jigmo — see fonts/. */
+  @font-face {
+    font-family: "DecompHan";
+    src: url("fonts/decomp-bsh.woff2") format("woff2");
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "DecompHanExtB";
+    src: url("fonts/decomp-jigmo2.woff2") format("woff2");
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "DecompHanExtC";
+    src: url("fonts/decomp-jigmo3.woff2") format("woff2");
+    font-display: swap;
+  }
+  /* Unencoded components (BabelStone IDS {NN} tokens) mapped to Private Use
+     Area codepoints, rendered by a subset of BabelStone Han PUA. Restricted
+     to the PUA range and listed FIRST in each stack so a system font with
+     unrelated PUA glyphs can never shadow it. */
+  @font-face {
+    font-family: "DecompHanPUA";
+    src: url("fonts/decomp-bsh-pua.woff2") format("woff2");
+    unicode-range: U+E080-F8DF;
+    font-display: swap;
+  }
+
+  :root {
+    --cjk-fonts: "DecompHanPUA", system-ui,
+                 "Hiragino Sans", "Yu Gothic", "Meiryo",
+                 "PingFang SC", "PingFang TC", "Microsoft YaHei",
+                 "Noto Sans CJK JP", "Noto Sans JP",
+                 "DecompHan", "DecompHanExtB", "DecompHanExtC", sans-serif;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -26,6 +65,7 @@
     width: 100%;
     height: 5rem;
     font-size: 3rem;
+    font-family: var(--cjk-fonts);
     text-align: center;
     border: 2px solid #ccc;
     border-radius: 6px;
@@ -37,10 +77,18 @@
     border-color: #666;
   }
 
+  /* When a decomposition is shown, the input field and the root box below
+     read as one unit: square off the field's bottom corners so the root box
+     (which squares its top corners and overlaps the shared border) joins it. */
+  #char-input.joined {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
   .btn-row {
     display: flex;
     gap: 0.6rem;
-    margin-top: 0.8rem;
+    margin-bottom: 0.8rem;
     align-items: center;
   }
 
@@ -56,14 +104,6 @@
   button:hover { background: #eee; }
   button:active { background: #ddd; }
 
-  #btn-decompose {
-    background: #f0880d;
-    color: #fff;
-    border-color: #d07400;
-  }
-  #btn-decompose:hover { background: #d07a0b; }
-  #btn-decompose:active { background: #b56a09; }
-
   #btn-gear {
     padding: 0.5rem 0.55rem;
     font-size: 1.05rem;
@@ -71,21 +111,206 @@
     color: #555;
     border-color: #bbb;
   }
+  /* The current-setting code next to the gear icon: smaller and faded. */
+  #btn-gear .gear-code {
+    font-size: 0.7em;
+    opacity: 0.5;
+  }
 
   #output {
     margin-top: 1.2rem;
-    font-family: "Cascadia Code", "Fira Code", "Menlo", "Consolas", monospace;
     font-size: 0.9rem;
     line-height: 1.5;
-    white-space: pre;
-    overflow-x: auto;
-    min-height: 2rem;
   }
+  /* Empty output (the normal case once data has loaded) adds no gap, so the
+     input field and root box can sit flush. */
+  #output:empty { margin: 0; }
 
   .loading {
     color: #888;
     font-style: italic;
     font-family: system-ui, sans-serif;
+  }
+
+  /* ── Decomposition boxes ── */
+
+  #decomp {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Connector strip between rows: dotted stub from the selected parent,
+     horizontal branch, and feeders down into each child box. Segments are
+     positioned by drawConnectors(). */
+  .decomp-conn {
+    position: relative;
+    height: 2.2rem;
+  }
+
+  .decomp-conn-seg {
+    position: absolute;
+  }
+
+  .decomp-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .decomp-box {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    background: #fff;
+    border: 2px solid #ccc;
+    border-radius: 6px;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1.35;
+    text-align: center;
+    overflow-wrap: break-word;
+    user-select: text;
+  }
+
+  /* Root box: joins the input field above it — square top corners and pull
+     up so its top border overlaps the field's bottom border (one divider). */
+  .decomp-box.decomp-root {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    margin-top: -2px;
+  }
+
+  /* Leaf boxes (not further decomposable, excluding the root header) carry a
+     subtle blue tint to set them apart from expandable boxes. */
+  .decomp-box:not(.clickable):not(.decomp-root) {
+    background: #eef3fb;
+  }
+
+  .decomp-box.clickable { cursor: pointer; }
+  .decomp-box.clickable:hover { border-color: #999; }
+  .decomp-box.clickable:active { background: #f0f0f0; }
+
+  .decomp-box.selected {
+    border-color: #f0880d;
+    background: #fff7ee;
+  }
+
+  /* Nudge selected boxes downward (~70% of a gloss-line cap height) to mark
+     the selected path. The root box stays put — it carries no glyph. */
+  .decomp-box.selected:not(.decomp-root) {
+    transform: translateY(0.6rem);
+  }
+  .decomp-box.selected.clickable:hover { border-color: #d07400; }
+
+  /* In a row where a sibling has been selected (drilled into), fade the
+     options that weren't chosen. Rows with no selection — the deepest,
+     not-yet-expanded options — are unaffected. Hover restores a faded box. */
+  .decomp-row:has(> .decomp-box.selected) > .decomp-box:not(.selected) {
+    opacity: 0.55;
+    transition: opacity 0.12s;
+  }
+  .decomp-row:has(> .decomp-box.selected) > .decomp-box:not(.selected):hover {
+    opacity: 1;
+  }
+
+  /* Expandable (non-leaf) boxes: a small tab protruding below, centered —
+     the counterpart of the leaf corner chip. Built as a square rotated 45°
+     whose two lower edges continue the box border and whose fill matches the
+     box background, so it reads as part of the box outline (and picks up the
+     hover / selected border colours). Its upper half sits inside the box. */
+  .decomp-box.clickable::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -8px;
+    width: 13px;
+    height: 13px;
+    transform: translateX(-50%) rotate(45deg);
+    background: #fff;
+    border-right: 2px solid #ccc;
+    border-bottom: 2px solid #ccc;
+  }
+  .decomp-box.clickable:hover::after { border-color: #999; }
+  .decomp-box.selected.clickable::after {
+    background: #fff7ee;
+    border-color: #f0880d;
+  }
+  .decomp-box.selected.clickable:hover::after { border-color: #d07400; }
+
+  .decomp-glyph {
+    font-family: var(--cjk-fonts);
+    font-size: 2.4rem;
+    line-height: 1.15;
+  }
+
+  .decomp-reading {
+    color: #888;
+    margin-top: 0.1rem;
+  }
+
+  .decomp-note {
+    font-style: italic;
+    color: #999;
+  }
+
+  /* Radical number: a large, faint sans-serif watermark in the top-right
+     corner behind the box content (which is lifted above it via z-index). */
+  .rad-watermark {
+    position: absolute;
+    top: 0.1rem;
+    right: 0.35rem;
+    z-index: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 2.5rem;
+    line-height: 1;
+    color: #2b3a5b;
+    opacity: 0.3;
+    pointer-events: none;
+    user-select: none;
+  }
+  .decomp-box > *:not(.rad-watermark):not(.rad-clover) { position: relative; z-index: 1; }
+
+  /* Clover marking the sort-radical: the one component a dictionary files the
+     parent character under. Small, top-left, above the box content. */
+  .rad-clover {
+    position: absolute;
+    top: 0.15rem;
+    left: 0.3rem;
+    z-index: 2;
+    font-size: 0.9rem;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Leaf boxes (not further decomposable) get a diagonal chip cut out of
+     the bottom-right corner: a page-background triangle covers the corner
+     (border included), and a diagonal stroke redraws the cut edge. */
+  .decomp-box:not(.clickable)::before {
+    content: "";
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 18px;
+    height: 18px;
+    background: #fafafa;
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  }
+
+  .decomp-box:not(.clickable)::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    bottom: 6px;
+    width: 26px;
+    height: 2px;
+    background: #ccc;
+    transform: rotate(-45deg);
   }
 
   /* ── Settings dialog ── */
@@ -178,16 +403,16 @@
 
 <h1>Character Decomposition &nbsp;<a href="about.html" style="font-size:0.8rem;font-weight:normal;">About</a></h1>
 
-<input id="char-input" type="text" maxlength="2" autocomplete="off" spellcheck="false" placeholder="...">
-
 <div class="btn-row">
-  <button id="btn-decompose">Decompose</button>
   <button id="btn-clear">Clear</button>
   <button id="btn-random">Random</button>
   <button id="btn-gear" title="Random settings">&#9881;</button>
 </div>
 
+<input id="char-input" type="text" maxlength="2" autocomplete="off" spellcheck="false" placeholder="...">
+
 <div id="output"></div>
+<div id="decomp"></div>
 
 <!-- Settings dialog -->
 <dialog id="settings-dialog">
@@ -221,8 +446,8 @@ let CANONICAL = null;
 
 // ── Settings state ──
 
-let currentCJK = "j";       // 'j' | 'simp' | 'trad'
-let currentLevel = "joyos"; // URL-param-style key
+let currentCJK = "trad";    // 'j' | 'simp' | 'trad'
+let currentLevel = "tocflc"; // URL-param-style key
 
 const DEFAULT_LEVEL = { j: "joyos", simp: "nhsk9", trad: "tocflc" };
 
@@ -238,6 +463,31 @@ const LEVEL_KEY = {
   nhsk7: "nhsk_7", nhsk8: "nhsk_8", nhsk9: "nhsk_9",
   tocfla: "tocfl_a", tocflb: "tocfl_b", tocflc: "tocfl_c",
 };
+
+// Short "country-item" tag shown on the gear button, e.g. jp-N5, jp-J3 (Jōyō
+// grade), zh-H6 (old HSK), zh-N9 (New HSK), tw-C (TOCFL band).
+const COUNTRY = { j: "jp", simp: "zh", trad: "tw" };
+
+function levelCode(level) {
+  let m;
+  if ((m = level.match(/^n([1-5])$/)))    return "N" + m[1];   // JLPT
+  if ((m = level.match(/^joyo([1-6])$/))) return "J" + m[1];   // Jōyō grade
+  if (level === "joyos")                  return "JS";         // Jōyō secondary
+  if ((m = level.match(/^hsk([1-6])$/)))  return "H" + m[1];   // old HSK
+  if ((m = level.match(/^nhsk([1-9])$/))) return "N" + m[1];   // New HSK
+  if ((m = level.match(/^tocfl([abc])$/))) return m[1].toUpperCase();  // TOCFL
+  return level;
+}
+
+function updateGearLabel() {
+  const cc = COUNTRY[currentCJK] || currentCJK;
+  const gear = document.getElementById("btn-gear");
+  gear.textContent = "⚙ ";
+  const code = document.createElement("span");
+  code.className = "gear-code";
+  code.textContent = "(" + cc + "-" + levelCode(currentLevel) + ")";
+  gear.appendChild(code);
+}
 
 // Dropdown options per language  [{ group, options: [{value, label}] }]
 const LEVEL_OPTIONS = {
@@ -295,8 +545,13 @@ async function loadData() {
   const out = document.getElementById("output");
   out.className = "loading";
   out.textContent = "Loading data...";
-  const resp = await fetch("data.json");
+  const resp = await fetch("data.json", { cache: "no-cache" });
   DATA = await resp.json();
+  // Tolerate a stale cached data.json missing newer maps.
+  for (const k of ["ids", "ids_simp", "ids_trad", "glosses",
+                   "readingsJa", "readingsZh"]) {
+    if (!DATA[k]) DATA[k] = {};
+  }
   ALL_RADICALS = new Set(DATA.allRadicals || []);
   CANONICAL = new Set(DATA.canonical || []);
   out.className = "";
@@ -335,8 +590,19 @@ function leaves(node) {
   return result;
 }
 
+// IDS lookup honoring the language setting: base data is the Japanese
+// (J-source-priority) pick; ids_simp/ids_trad hold only the entries whose
+// regional decomposition differs.
+function idsOf(char) {
+  if (currentCJK === "simp" && DATA.ids_simp[char] !== undefined)
+    return DATA.ids_simp[char];
+  if (currentCJK === "trad" && DATA.ids_trad[char] !== undefined)
+    return DATA.ids_trad[char];
+  return DATA.ids[char];
+}
+
 function shouldDecompose(char) {
-  const idsStr = DATA.ids[char];
+  const idsStr = idsOf(char);
   if (!idsStr) return false;
   if (!ALL_RADICALS.has(char)) return true;
   try {
@@ -348,46 +614,322 @@ function shouldDecompose(char) {
   }
 }
 
-// ── Tree rendering ──
+// ── Box rendering ──
 
-function renderTree(char, seen) {
-  if (!seen) seen = new Set();
-  const lines = [];
-  const gloss = DATA.glosses[char] || "";
-  const glossStr = gloss ? `  (${gloss})` : "";
-  lines.push(char + glossStr);
+// Chars whose component row is open; path[0] is the input char.
+let path = [];
 
-  if (!seen.has(char) && shouldDecompose(char)) {
-    seen.add(char);
-    try {
-      const [parsed] = parseIDS(DATA.ids[char], 0);
-      const children = leaves(parsed);
-      for (let i = 0; i < children.length; i++) {
-        appendChild(lines, children[i], "", i === children.length - 1, seen);
-      }
-    } catch (e) {}
-  }
-  return lines.join("\n");
+function currentChar() {
+  return [...document.getElementById("char-input").value.trim()][0] || "";
 }
 
-function appendChild(lines, char, prefix, isLast, seen) {
-  const connector = isLast ? "└── " : "├── ";
-  const extension = isLast ? "    " : "│   ";
-  const gloss = DATA.glosses[char] || "";
-  const glossStr = gloss ? `  (${gloss})` : "";
-  lines.push(prefix + connector + char + glossStr);
-
-  if (seen.has(char)) return;
-  seen.add(char);
-  if (!shouldDecompose(char)) return;
-
+function directComponents(char) {
   try {
-    const [parsed] = parseIDS(DATA.ids[char], 0);
-    const children = leaves(parsed);
-    for (let i = 0; i < children.length; i++) {
-      appendChild(lines, children[i], prefix + extension, i === children.length - 1, seen);
+    const [parsed] = parseIDS(idsOf(char), 0);
+    return leaves(parsed);
+  } catch (e) {
+    return [];
+  }
+}
+
+function isPUA(char) {
+  const cp = char.codePointAt(0);
+  return cp >= 0xE000 && cp <= 0xF8FF;
+}
+
+function readingFor(char) {
+  const map = currentCJK === "j" ? DATA.readingsJa : DATA.readingsZh;
+  const raw = map[char] || "";
+  // Readings are stored as whitespace-separated tokens; show them
+  // separated by " / " instead.
+  return raw.split(/\s+/).filter(Boolean).join(" / ");
+}
+
+// Drop redundant "; Kangxi radical NN" / "; radical number NN" phrases (the
+// number is shown as a watermark, so the phrase adds nothing).
+function cleanGloss(gloss) {
+  return gloss.replace(/[;,]?\s*(?:[Kk]angxi radical|radical number)\s*[0-9]*/g, "")
+              .trim();
+}
+
+// Determine a box's radical number (for the watermark) and cleaned display
+// text. Handles two shapes: canonical radicals labelled "NN: name — gloss",
+// and variant component forms (忄 扌 氵 飠 …) whose Unihan definition names
+// their radical (e.g. "eat, food; radical number 184"). Null if neither.
+function radicalInfo(char, gloss) {
+  if (ALL_RADICALS.has(char)) {
+    const m = gloss.match(/^([0-9]+):\s*([\s\S]*)$/);
+    if (m) {
+      let name = m[2], text = m[2];
+      const dash = m[2].indexOf(" — ");
+      if (dash >= 0) { name = m[2].slice(0, dash); text = m[2].slice(dash + 3); }
+      return { num: m[1], text: cleanGloss(text) || name };
     }
-  } catch (e) {}
+  }
+  const p = gloss.match(/(?:[Kk]angxi radical|radical number)\s*([0-9]+)/);
+  if (p) return { num: p[1], text: cleanGloss(gloss) };
+  // Fall back to kRSUnicode: residual 0 means this char IS a radical form
+  // (𠆢 = 9.0, 纟 = 120.0) even when no gloss or radical table names it.
+  const r = rsOf(char);
+  if (r && r.res === 0) {
+    return { num: String(r.num),
+             text: cleanGloss(gloss) || radicalName(r.num) };
+  }
+  return null;
+}
+
+// Kangxi radical number -> English name, derived from the canonical radical
+// labels ("85: water — ..."). Built once on first use.
+let RADICAL_NAMES = null;
+function radicalName(num) {
+  if (!RADICAL_NAMES) {
+    RADICAL_NAMES = {};
+    for (const ch of DATA.allRadicals) {
+      const m = (DATA.glosses[ch] || "").match(/^([0-9]+):\s*([^—]+?)\s*(?:—|$)/);
+      if (m && !(m[1] in RADICAL_NAMES)) RADICAL_NAMES[m[1]] = m[2];
+    }
+  }
+  return RADICAL_NAMES[String(num)] || "";
+}
+
+// kRSUnicode radical-stroke lookup: {num, res} or null. res===0 means the
+// character IS a radical form (氵 = 85.0); otherwise it is filed under that
+// radical (河 = 85.5, under radical 85 水).
+function rsOf(char) {
+  const v = DATA.rs && DATA.rs[char];
+  if (!v) return null;
+  const dot = v.indexOf(".");
+  return { num: parseInt(v.slice(0, dot), 10),
+           res: parseInt(v.slice(dot + 1), 10) };
+}
+
+// True if `char` or any character in its decomposition subtree is the radical
+// form of radical `R` (used to locate a sort-radical buried below the top row).
+function subtreeHasRadical(char, R, seen) {
+  const r = rsOf(char);
+  if (r && r.num === R && r.res === 0) return true;
+  if (seen.has(char)) return false;
+  seen.add(char);
+  const idsStr = idsOf(char);
+  if (!idsStr) return false;
+  try {
+    return leaves(parseIDS(idsStr, 0)[0])
+      .some(c => subtreeHasRadical(c, R, seen));
+  } catch (e) {
+    return false;
+  }
+}
+
+// Index into directComponents(parent) of the component that is the parent's
+// sort-radical, or -1. Prefer a direct component that IS the radical form;
+// otherwise the direct component whose subtree contains it.
+function sortRadicalIndex(parent) {
+  const pr = rsOf(parent);
+  if (!pr) return -1;
+  const R = pr.num;
+  const comps = directComponents(parent);
+  for (let i = 0; i < comps.length; i++) {
+    const r = rsOf(comps[i]);
+    if (r && r.num === R && r.res === 0) return i;
+  }
+  for (let i = 0; i < comps.length; i++) {
+    if (subtreeHasRadical(comps[i], R, new Set())) return i;
+  }
+  return -1;
+}
+
+function makeBox(char, depth, isRoot, isSortRadical) {
+  const box = document.createElement("div");
+  box.className = "decomp-box";
+  if (isRoot) box.classList.add("decomp-root");
+  if (path[depth] === char) box.classList.add("selected");
+
+  if (isSortRadical) {
+    const clover = document.createElement("span");
+    clover.className = "rad-clover";
+    // Abstract quatrefoil (stylized clover), monochrome via currentColor —
+    // marks the parent's sort-radical without a colored emoji glyph.
+    clover.innerHTML =
+      '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true">' +
+      '<g fill="none" stroke="currentColor" stroke-width="1.3">' +
+      '<circle cx="8" cy="4.4" r="2.9"/>' +
+      '<circle cx="8" cy="11.6" r="2.9"/>' +
+      '<circle cx="4.4" cy="8" r="2.9"/>' +
+      '<circle cx="11.6" cy="8" r="2.9"/>' +
+      '</g></svg>';
+    clover.title = "sort radical";
+    box.appendChild(clover);
+  }
+
+  if (!isRoot) {
+    const glyph = document.createElement("span");
+    glyph.className = "decomp-glyph";
+    glyph.textContent = char;
+    box.appendChild(glyph);
+  }
+
+  const info = document.createElement("div");
+  let gloss = DATA.glosses[char] || "";
+  const rad = radicalInfo(char, gloss);
+  if (rad) {
+    gloss = rad.text;
+    const wm = document.createElement("span");
+    wm.className = "rad-watermark";
+    wm.textContent = rad.num;
+    box.appendChild(wm);
+  } else {
+    gloss = cleanGloss(gloss);
+  }
+  const reading = readingFor(char);
+  if (isPUA(char)) {
+    // Unencoded components carry the BabelStone header description as
+    // their gloss ("top of 合") when the token table provides one.
+    const note = document.createElement("div");
+    note.className = "decomp-note";
+    note.textContent = gloss || "unencoded component";
+    info.appendChild(note);
+  } else if (!gloss && !DATA.readingsJa[char] && !DATA.readingsZh[char]) {
+    const note = document.createElement("div");
+    note.className = "decomp-note";
+    note.textContent = "meaningless component";
+    info.appendChild(note);
+  } else {
+    if (gloss) {
+      const g = document.createElement("div");
+      g.className = "decomp-gloss";
+      g.textContent = gloss;
+      info.appendChild(g);
+    }
+    if (reading) {
+      const r = document.createElement("div");
+      r.className = "decomp-reading";
+      r.textContent = reading;
+      info.appendChild(r);
+    }
+  }
+  if (info.childNodes.length) box.appendChild(info);
+
+  if (shouldDecompose(char)) {
+    box.classList.add("clickable");
+    box.addEventListener("click", () => {
+      // A "click" that actually completed a text selection (drag-release
+      // inside the box) shouldn't navigate — let the selection stand.
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return;
+      const wasSelected = path[depth] === char;
+      path = path.slice(0, depth);
+      if (!wasSelected) path.push(char);
+      render();
+      syncURL(currentChar(), path.length > 0);
+    });
+  }
+  return box;
+}
+
+// Truncate path at the first link that is invalid under the current
+// language's decompositions (used when the language setting changes).
+function validatePath() {
+  for (let j = 0; j < path.length; j++) {
+    const bad = !shouldDecompose(path[j]) ||
+      (j > 0 && !directComponents(path[j - 1]).includes(path[j]));
+    if (bad) { path = path.slice(0, j); return; }
+  }
+}
+
+function render() {
+  const decomp = document.getElementById("decomp");
+  const input = document.getElementById("char-input");
+  decomp.innerHTML = "";
+  const ch = DATA ? currentChar() : "";
+  if (!ch) { input.classList.remove("joined"); return; }
+  // The root box renders flush beneath the input field as one unit.
+  input.classList.add("joined");
+
+  // Root box: gloss + readings for the input char (glyph is in the input).
+  const rootRow = document.createElement("div");
+  rootRow.className = "decomp-row";
+  rootRow.appendChild(makeBox(ch, 0, true));
+  decomp.appendChild(rootRow);
+
+  // One row of component boxes per open char in the path, with a connector
+  // strip between each row and the one above it.
+  for (let depth = 0; depth < path.length; depth++) {
+    const conn = document.createElement("div");
+    conn.className = "decomp-conn";
+    decomp.appendChild(conn);
+    const row = document.createElement("div");
+    row.className = "decomp-row";
+    const comps = directComponents(path[depth]);
+    const sri = sortRadicalIndex(path[depth]);
+    comps.forEach((comp, i) => {
+      row.appendChild(makeBox(comp, depth + 1, false, i === sri));
+    });
+    decomp.appendChild(row);
+  }
+  drawConnectors();
+}
+
+// Position the dotted hierarchy lines inside each connector strip: a stub
+// down from the selected parent box, a horizontal branch, and a feeder down
+// into each child box. Re-run on resize (positions are pixel-based).
+function drawConnectors() {
+  const GRAY = "2px dotted #bbb";
+  const ORANGE = "2px dotted #f0880d";
+  const TRI = 9; // protrusion of the expandable-box tab the stub emerges from
+
+  document.querySelectorAll("#decomp .decomp-conn").forEach(conn => {
+    conn.innerHTML = "";
+    const base = conn.getBoundingClientRect();
+    const centerX = el => {
+      const r = el.getBoundingClientRect();
+      return r.left + r.width / 2 - base.left;
+    };
+    const seg = style => {
+      const d = document.createElement("div");
+      d.className = "decomp-conn-seg";
+      Object.assign(d.style, style);
+      conn.appendChild(d);
+    };
+
+    const below = conn.nextElementSibling;
+    if (!below) return;
+    const kids = below.querySelectorAll(".decomp-box");
+    if (!kids.length) return;
+
+    const above = conn.previousElementSibling;
+    const parent = above && (above.querySelector(".decomp-box.selected") ||
+                             above.querySelector(".decomp-box"));
+    if (!parent) return;
+
+    // Stub starts below the parent's protruding triangle (parent may be
+    // shifted down by the selected-path nudge); feeders end at each child's
+    // actual top edge (the selected child sits lower than its siblings).
+    const px = centerX(parent);
+    const stubTop = parent.getBoundingClientRect().bottom - base.top + TRI - 3;
+    const horizY = Math.max(stubTop + 4, base.height * 0.55);
+    const selKid = [...kids].find(k => k.classList.contains("selected"));
+    const centers = [...kids].map(centerX);
+    const lo = Math.min(px, ...centers);
+    const hi = Math.max(px, ...centers);
+
+    seg({ left: (px - 1) + "px", top: stubTop + "px",
+          height: Math.max(0, horizY - stubTop) + "px",
+          borderLeft: selKid ? ORANGE : GRAY });
+    seg({ left: (lo - 1) + "px", top: (horizY - 1) + "px",
+          width: (hi - lo + 2) + "px", borderTop: GRAY });
+    if (selKid) {
+      // Overlay the parent→selected-child stretch of the branch in orange.
+      const sx = centerX(selKid);
+      seg({ left: (Math.min(px, sx) - 1) + "px", top: (horizY - 1) + "px",
+            width: (Math.abs(sx - px) + 2) + "px", borderTop: ORANGE });
+    }
+    kids.forEach((kid, i) => {
+      const kidTop = kid.getBoundingClientRect().top - base.top;
+      seg({ left: (centers[i] - 1) + "px", top: horizY + "px",
+            height: Math.max(0, kidTop - horizY) + "px",
+            borderLeft: kid === selKid ? ORANGE : GRAY });
+    });
+  });
 }
 
 // ── URL sync ──
@@ -411,14 +953,13 @@ function syncURLSettings() {
 
 // ── Core actions ──
 
-function decompose() {
+function toggleRoot() {
   if (!DATA) return;
-  const input = document.getElementById("char-input");
-  const out = document.getElementById("output");
-  const ch = [...input.value.trim()][0];
-  if (!ch) { out.textContent = ""; syncURL("", false); return; }
-  out.textContent = renderTree(ch, null);
-  syncURL(ch, true);
+  const ch = currentChar();
+  if (!ch) return;
+  path = path.length ? [] : (shouldDecompose(ch) ? [ch] : []);
+  render();
+  syncURL(ch, path.length > 0);
 }
 
 function pickRandom() {
@@ -433,6 +974,8 @@ function pickRandom() {
   const ch = list[Math.floor(Math.random() * list.length)];
   document.getElementById("char-input").value = ch;
   document.getElementById("output").textContent = "";
+  path = [];
+  render();
   syncURL(ch, false);
 }
 
@@ -440,6 +983,8 @@ function clearInput() {
   const input = document.getElementById("char-input");
   input.value = "";
   document.getElementById("output").textContent = "";
+  path = [];
+  render();
   syncURL("", false);
   input.focus();
 }
@@ -484,7 +1029,8 @@ function initFromURL() {
   const cjkParam = params.get("cjk");
   if (cjkParam === "simp") currentCJK = "simp";
   else if (cjkParam === "trad" || cjkParam === "c") currentCJK = "trad";
-  else currentCJK = "j";
+  else if (cjkParam === "j") currentCJK = "j";
+  else currentCJK = "trad";
 
   // l param
   const lParam = params.get("l");
@@ -508,10 +1054,8 @@ function initFromURL() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   initFromURL();
-  await loadData();
-  if (_autoDecompose) decompose();
+  updateGearLabel();
 
-  document.getElementById("btn-decompose").addEventListener("click", decompose);
   document.getElementById("btn-random").addEventListener("click", pickRandom);
   document.getElementById("btn-clear").addEventListener("click", clearInput);
   document.getElementById("btn-gear").addEventListener("click", openSettings);
@@ -525,13 +1069,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentCJK = radio.value;
       currentLevel = DEFAULT_LEVEL[currentCJK];
       populateLevelSelect(document.getElementById("dlg-level"), currentCJK, currentLevel);
+      updateGearLabel();
       syncURLSettings();
+      if (DATA) validatePath();
+      render();
     });
   });
 
   // Level select change in dialog
   document.getElementById("dlg-level").addEventListener("change", (e) => {
     currentLevel = e.target.value;
+    updateGearLabel();
     syncURLSettings();
   });
 
@@ -543,13 +1091,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   const input = document.getElementById("char-input");
   input.addEventListener("input", () => {
     document.getElementById("output").textContent = "";
-    const ch = [...input.value.trim()][0] || "";
-    syncURL(ch, false);
+    path = [];
+    render();
+    syncURL(currentChar(), false);
   });
 
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); decompose(); }
+    if (e.key === "Enter") { e.preventDefault(); toggleRoot(); }
   });
+
+  window.addEventListener("resize", drawConnectors);
+
+  await loadData();
+  if (_autoDecompose) {
+    const ch = currentChar();
+    if (ch && shouldDecompose(ch)) path = [ch];
+  }
+  render();
 });
 </script>
 </body>
