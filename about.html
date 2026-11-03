@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>About — Character Decomposition</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --fg: #1a1a1a; --bg: #fafafa; --muted: #888; --h3: #444; --link: #c06800; --code-bg: #eee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6e6e6; --bg: #17181a; --muted: #8e9198; --h3: #c4c7cc; --link: #f0952d; --code-bg: #2a2b2f; }
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -12,18 +20,18 @@
     max-width: 640px;
     margin: 2rem auto;
     padding: 0 1rem;
-    color: #1a1a1a;
-    background: #fafafa;
+    color: var(--fg);
+    background: var(--bg);
   }
 
   .back {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--muted);
     margin-bottom: 1.4rem;
     display: block;
   }
 
-  .back a { color: #888; text-decoration: none; }
+  .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { text-decoration: underline; }
 
   #content h2 {
@@ -35,7 +43,7 @@
     font-size: 1rem;
     font-weight: 600;
     margin: 1.4rem 0 0.6rem;
-    color: #444;
+    color: var(--h3);
   }
 
   #content p {
@@ -56,13 +64,13 @@
     line-height: 1.55;
   }
 
-  #content a { color: #c06800; text-decoration: none; }
+  #content a { color: var(--link); text-decoration: none; }
   #content a:hover { text-decoration: underline; }
 
   #content code {
     font-family: "Cascadia Code", "Fira Code", "Menlo", "Consolas", monospace;
     font-size: 0.85em;
-    background: #eee;
+    background: var(--code-bg);
     padding: 0.1em 0.3em;
     border-radius: 3px;
   }

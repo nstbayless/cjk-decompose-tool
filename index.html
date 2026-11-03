@@ -44,6 +44,34 @@
                  "DecompHan", "DecompHanExtB", "DecompHanExtC", sans-serif;
   }
 
+
+  /* ── Colour theme: light by default, dark when the system prefers it ── */
+  :root {
+    color-scheme: light dark;
+    --fg: #1a1a1a;          --bg: #fafafa;          --surface: #fff;
+    --border: #ccc;         --border-strong: #999;  --border-focus: #666;
+    --btn-hover: #eee;      --btn-active: #ddd;     --box-active: #f0f0f0;
+    --gear: #555;           --gear-border: #bbb;
+    --muted: #888;          --note: #999;           --legend: #666;   --x-hover: #333;
+    --leaf: #eef3fb;        --watermark: #2b3a5b;
+    --sel-border: #f0880d;  --sel-bg: #fff7ee;      --sel-hover: #d07400;
+    --conn: #bbb;           --rule: #eee;           --fieldset: #ddd;
+    --shadow: rgba(0,0,0,0.15);  --backdrop: rgba(0,0,0,0.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e6e6e6;          --bg: #17181a;          --surface: #222326;
+      --border: #45474c;      --border-strong: #6b6e75; --border-focus: #9a9da3;
+      --btn-hover: #2c2d31;   --btn-active: #36383c;  --box-active: #2a2b2f;
+      --gear: #b5b8be;        --gear-border: #55585e;
+      --muted: #8e9198;       --note: #80838a;        --legend: #a0a3a9; --x-hover: #ddd;
+      --leaf: #1c2433;        --watermark: #a9bde6;
+      --sel-border: #f0952d;  --sel-bg: #34261a;      --sel-hover: #ffad4d;
+      --conn: #5a5d63;        --rule: #2e3034;        --fieldset: #3a3c40;
+      --shadow: rgba(0,0,0,0.5);   --backdrop: rgba(0,0,0,0.55);
+    }
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -51,8 +79,8 @@
     max-width: 640px;
     margin: 2rem auto;
     padding: 0 1rem;
-    color: #1a1a1a;
-    background: #fafafa;
+    color: var(--fg);
+    background: var(--bg);
   }
 
   h1 {
@@ -67,14 +95,15 @@
     font-size: 3rem;
     font-family: var(--cjk-fonts);
     text-align: center;
-    border: 2px solid #ccc;
+    border: 2px solid var(--border);
     border-radius: 6px;
     outline: none;
-    background: #fff;
+    background: var(--surface);
+    color: var(--fg);
   }
 
   #char-input:focus {
-    border-color: #666;
+    border-color: var(--border-focus);
   }
 
   /* When a decomposition is shown, the input field and the root box below
@@ -95,21 +124,22 @@
   button {
     padding: 0.5rem 1.2rem;
     font-size: 0.95rem;
-    border: 1px solid #999;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
-    background: #fff;
+    background: var(--surface);
+    color: var(--fg);
     cursor: pointer;
   }
 
-  button:hover { background: #eee; }
-  button:active { background: #ddd; }
+  button:hover { background: var(--btn-hover); }
+  button:active { background: var(--btn-active); }
 
   #btn-gear {
     padding: 0.5rem 0.55rem;
     font-size: 1.05rem;
     line-height: 1;
-    color: #555;
-    border-color: #bbb;
+    color: var(--gear);
+    border-color: var(--gear-border);
   }
   /* The current-setting code next to the gear icon: smaller and faded. */
   #btn-gear .gear-code {
@@ -127,7 +157,7 @@
   #output:empty { margin: 0; }
 
   .loading {
-    color: #888;
+    color: var(--muted);
     font-style: italic;
     font-family: system-ui, sans-serif;
   }
@@ -165,8 +195,8 @@
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    background: #fff;
-    border: 2px solid #ccc;
+    background: var(--surface);
+    border: 2px solid var(--border);
     border-radius: 6px;
     padding: 0.45rem 0.5rem;
     font-size: 0.85rem;
@@ -187,16 +217,16 @@
   /* Leaf boxes (not further decomposable, excluding the root header) carry a
      subtle blue tint to set them apart from expandable boxes. */
   .decomp-box:not(.clickable):not(.decomp-root) {
-    background: #eef3fb;
+    background: var(--leaf);
   }
 
   .decomp-box.clickable { cursor: pointer; }
-  .decomp-box.clickable:hover { border-color: #999; }
-  .decomp-box.clickable:active { background: #f0f0f0; }
+  .decomp-box.clickable:hover { border-color: var(--border-strong); }
+  .decomp-box.clickable:active { background: var(--box-active); }
 
   .decomp-box.selected {
-    border-color: #f0880d;
-    background: #fff7ee;
+    border-color: var(--sel-border);
+    background: var(--sel-bg);
   }
 
   /* Nudge selected boxes downward (~70% of a gloss-line cap height) to mark
@@ -204,7 +234,7 @@
   .decomp-box.selected:not(.decomp-root) {
     transform: translateY(0.6rem);
   }
-  .decomp-box.selected.clickable:hover { border-color: #d07400; }
+  .decomp-box.selected.clickable:hover { border-color: var(--sel-hover); }
 
   /* In a row where a sibling has been selected (drilled into), fade the
      options that weren't chosen. Rows with no selection — the deepest,
@@ -230,16 +260,16 @@
     width: 13px;
     height: 13px;
     transform: translateX(-50%) rotate(45deg);
-    background: #fff;
-    border-right: 2px solid #ccc;
-    border-bottom: 2px solid #ccc;
+    background: var(--surface);
+    border-right: 2px solid var(--border);
+    border-bottom: 2px solid var(--border);
   }
-  .decomp-box.clickable:hover::after { border-color: #999; }
+  .decomp-box.clickable:hover::after { border-color: var(--border-strong); }
   .decomp-box.selected.clickable::after {
-    background: #fff7ee;
-    border-color: #f0880d;
+    background: var(--sel-bg);
+    border-color: var(--sel-border);
   }
-  .decomp-box.selected.clickable:hover::after { border-color: #d07400; }
+  .decomp-box.selected.clickable:hover::after { border-color: var(--sel-hover); }
 
   .decomp-glyph {
     font-family: var(--cjk-fonts);
@@ -248,13 +278,13 @@
   }
 
   .decomp-reading {
-    color: #888;
+    color: var(--muted);
     margin-top: 0.1rem;
   }
 
   .decomp-note {
     font-style: italic;
-    color: #999;
+    color: var(--note);
   }
 
   /* Radical number: a large, faint sans-serif watermark in the top-right
@@ -268,7 +298,7 @@
     font-weight: 700;
     font-size: 2.5rem;
     line-height: 1;
-    color: #2b3a5b;
+    color: var(--watermark);
     opacity: 0.3;
     pointer-events: none;
     user-select: none;
@@ -298,7 +328,7 @@
     bottom: -2px;
     width: 18px;
     height: 18px;
-    background: #fafafa;
+    background: var(--bg);
     clip-path: polygon(100% 0, 100% 100%, 0 100%);
   }
 
@@ -309,22 +339,24 @@
     bottom: 6px;
     width: 26px;
     height: 2px;
-    background: #ccc;
+    background: var(--border);
     transform: rotate(-45deg);
   }
 
   /* ── Settings dialog ── */
 
   dialog {
-    border: 1px solid #ccc;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 0;
     min-width: 300px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 24px var(--shadow);
   }
 
   dialog::backdrop {
-    background: rgba(0,0,0,0.25);
+    background: var(--backdrop);
   }
 
   .dlg-header {
@@ -332,7 +364,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.9rem 1rem 0.7rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--rule);
   }
 
   .dlg-header strong {
@@ -343,12 +375,12 @@
     background: none;
     border: none;
     font-size: 1.2rem;
-    color: #888;
+    color: var(--muted);
     padding: 0 0.2rem;
     line-height: 1;
     cursor: pointer;
   }
-  .dlg-x:hover { color: #333; background: none; }
+  .dlg-x:hover { color: var(--x-hover); background: none; }
   .dlg-x:active { background: none; }
 
   .dlg-body {
@@ -359,14 +391,14 @@
   }
 
   .dlg-fieldset {
-    border: 1px solid #ddd;
+    border: 1px solid var(--fieldset);
     border-radius: 5px;
     padding: 0.6rem 0.8rem 0.7rem;
   }
 
   .dlg-fieldset legend {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--legend);
     padding: 0 0.3rem;
   }
 
@@ -384,7 +416,7 @@
   .dlg-level-wrap label {
     display: block;
     font-size: 0.8rem;
-    color: #666;
+    color: var(--legend);
     margin-bottom: 0.3rem;
   }
 
@@ -392,9 +424,10 @@
     width: 100%;
     font-size: 0.95rem;
     padding: 0.35rem 0.5rem;
-    border: 1px solid #ccc;
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: #fff;
+    background: var(--surface);
+    color: var(--fg);
     cursor: pointer;
   }
 </style>
@@ -873,8 +906,8 @@ function render() {
 // down from the selected parent box, a horizontal branch, and a feeder down
 // into each child box. Re-run on resize (positions are pixel-based).
 function drawConnectors() {
-  const GRAY = "2px dotted #bbb";
-  const ORANGE = "2px dotted #f0880d";
+  const GRAY = "2px dotted var(--conn)";
+  const ORANGE = "2px dotted var(--sel-border)";
   const TRI = 9; // protrusion of the expandable-box tab the stub emerges from
 
   document.querySelectorAll("#decomp .decomp-conn").forEach(conn => {
